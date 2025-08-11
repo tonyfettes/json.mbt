@@ -72,7 +72,8 @@ fn[Number : Number] Parser::parse_value(
       self.parse_string(buffer)
       String(buffer.contents())
     }
-    ['[', ..] => {
+    ['[', .. view] => {
+      self.update(view)
       let elements = []
       self.parse_array(elements)
       Array(elements)
@@ -83,7 +84,7 @@ fn[Number : Number] Parser::parse_value(
       self.parse_object(obj)
       Object(obj)
     }
-    ['-' | '0'..='9', ..] => self.parse_number()
+    ['-' | '0'..='9', ..] => Number(self.parse_number())
     [..] => raise ParseError("Unexpected character", self.pos)
   }
 }
@@ -91,7 +92,7 @@ fn[Number : Number] Parser::parse_value(
 ///|
 fn[Number : Number] Parser::parse_number(
   self : Parser,
-) -> Json[Number] raise ParseError {
+) -> Number raise ParseError {
   let start = self.pos
 
   // Optional minus sign
@@ -157,7 +158,7 @@ fn[Number : Number] Parser::parse_number(
     _ => ()
   }
   if Number::parse(self.data[start:self.pos]) is Some(number) {
-    return Json::Number(number)
+    return number
   } else {
     raise ParseError("Invalid number format", start)
   }
@@ -273,10 +274,6 @@ fn[Number : Number] Parser::parse_array(
   self : Parser,
   elements : Array[Json[Number]],
 ) -> Unit raise ParseError {
-  if self.peek() != Some('[') {
-    raise ParseError("Expected opening bracket", self.pos)
-  }
-  self.pos = self.pos + 1
   self.skip_whitespace()
 
   // Empty array
