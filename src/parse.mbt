@@ -11,7 +11,7 @@ fn skip_whitespace(input : @bytes.View, pos : Int) -> Int {
   let mut i = pos
   while i < len {
     match input[i] {
-      b' ' | b'\t' | b'\n' | b'\r' => i = i + 1
+      ' ' | '\t' | '\n' | '\r' => i = i + 1
       _ => break
     }
   }
@@ -25,12 +25,12 @@ fn parse_value(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError {
     raise ParseError("Unexpected end of input", pos)
   }
   match input[pos] {
-    b'n' => parse_null(input, pos)
-    b't' | b'f' => parse_bool(input, pos)
-    b'"' => parse_string(input, pos)
-    b'[' => parse_array(input, pos)
-    b'{' => parse_object(input, pos)
-    b'-' | '0'..='9' => parse_number(input, pos)
+    'n' => parse_null(input, pos)
+    't' | 'f' => parse_bool(input, pos)
+    '"' => parse_string(input, pos)
+    '[' => parse_array(input, pos)
+    '{' => parse_object(input, pos)
+    '-' | '0'..='9' => parse_number(input, pos)
     _ => raise ParseError("Unexpected character", pos)
   }
 }
@@ -38,10 +38,10 @@ fn parse_value(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError {
 ///| Parse null literal
 fn parse_null(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError {
   if pos + 4 <= input.length() &&
-    input[pos] == b'n' &&
-    input[pos + 1] == b'u' &&
-    input[pos + 2] == b'l' &&
-    input[pos + 3] == b'l' {
+    input[pos] == 'n' &&
+    input[pos + 1] == 'u' &&
+    input[pos + 2] == 'l' &&
+    input[pos + 3] == 'l' {
     (Null, pos + 4)
   } else {
     raise ParseError("Invalid null literal", pos)
@@ -51,31 +51,31 @@ fn parse_null(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError {
 ///| Parse boolean literal
 fn parse_bool(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError {
   if pos + 4 <= input.length() &&
-    input[pos] == b't' &&
-    input[pos + 1] == b'r' &&
-    input[pos + 2] == b'u' &&
-    input[pos + 3] == b'e' {
+    input[pos] == 't' &&
+    input[pos + 1] == 'r' &&
+    input[pos + 2] == 'u' &&
+    input[pos + 3] == 'e' {
     (Bool(true), pos + 4)
   } else if pos + 5 <= input.length() &&
-    input[pos] == b'f' &&
-    input[pos + 1] == b'a' &&
-    input[pos + 2] == b'l' &&
-    input[pos + 3] == b's' &&
-    input[pos + 4] == b'e' {
+    input[pos] == 'f' &&
+    input[pos + 1] == 'a' &&
+    input[pos + 2] == 'l' &&
+    input[pos + 3] == 's' &&
+    input[pos + 4] == 'e' {
     (Bool(false), pos + 5)
   } else {
     raise ParseError("Invalid boolean literal", pos)
   }
 }
 
-///| Parse number literal  
+///| Parse number literal
 fn parse_number(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError {
   let start = pos
   let len = input.length()
   let mut i = pos
 
   // Optional minus sign
-  if i < len && input[i] == b'-' {
+  if i < len && input[i] == '-' {
     i = i + 1
   }
   if i >= len {
@@ -83,11 +83,11 @@ fn parse_number(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError 
   }
 
   // Integer part
-  if input[i] == b'0' {
+  if input[i] == '0' {
     i = i + 1
-  } else if input[i] >= b'1' && input[i] <= b'9' {
+  } else if input[i] >= '1' && input[i] <= '9' {
     i = i + 1
-    while i < len && input[i] >= b'0' && input[i] <= b'9' {
+    while i < len && input[i] >= '0' && input[i] <= '9' {
       i = i + 1
     }
   } else {
@@ -95,26 +95,26 @@ fn parse_number(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError 
   }
 
   // Optional fractional part
-  if i < len && input[i] == b'.' {
+  if i < len && input[i] == '.' {
     i = i + 1
-    if i >= len || input[i] < b'0' || input[i] > b'9' {
+    if i >= len || input[i] < '0' || input[i] > '9' {
       raise ParseError("Invalid number: missing fractional digits", pos)
     }
-    while i < len && input[i] >= b'0' && input[i] <= b'9' {
+    while i < len && input[i] >= '0' && input[i] <= '9' {
       i = i + 1
     }
   }
 
   // Optional exponent part
-  if i < len && (input[i] == b'e' || input[i] == b'E') {
+  if i < len && (input[i] == 'e' || input[i] == 'E') {
     i = i + 1
-    if i < len && (input[i] == b'+' || input[i] == b'-') {
+    if i < len && (input[i] == '+' || input[i] == '-') {
       i = i + 1
     }
-    if i >= len || input[i] < b'0' || input[i] > b'9' {
+    if i >= len || input[i] < '0' || input[i] > '9' {
       raise ParseError("Invalid number: missing exponent digits", pos)
     }
-    while i < len && input[i] >= b'0' && input[i] <= b'9' {
+    while i < len && input[i] >= '0' && input[i] <= '9' {
       i = i + 1
     }
   }
@@ -123,7 +123,7 @@ fn parse_number(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError 
 
 ///| Parse string literal
 fn parse_string(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError {
-  if pos >= input.length() || input[pos] != b'"' {
+  if pos >= input.length() || input[pos] != '"' {
     raise ParseError("Expected opening quote", pos)
   }
   let start = pos + 1
@@ -131,15 +131,15 @@ fn parse_string(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError 
   let mut i = start
   while i < len {
     match input[i] {
-      b'"' => return (String(input[start:i]), i + 1)
-      b'\\' => {
+      '"' => return (String(input[start:i]), i + 1)
+      '\\' => {
         i = i + 1
         if i >= len {
           raise ParseError("Unexpected end of string after escape", i)
         }
         match input[i] {
-          b'"' | b'\\' | b'/' | b'b' | b'f' | b'n' | b'r' | b't' => i = i + 1
-          b'u' => {
+          '"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't' => i = i + 1
+          'u' => {
             i = i + 1
             if i + 4 > len {
               raise ParseError("Invalid unicode escape sequence", i)
@@ -148,9 +148,9 @@ fn parse_string(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError 
             for j = 0; j < 4; j = j + 1 {
               let c = input[i + j]
               if not(
-                  (c >= b'0' && c <= b'9') ||
-                  (c >= b'a' && c <= b'f') ||
-                  (c >= b'A' && c <= b'F'),
+                  (c >= '0' && c <= '9') ||
+                  (c >= 'a' && c <= 'f') ||
+                  (c >= 'A' && c <= 'F'),
                 ) {
                 raise ParseError("Invalid unicode escape sequence", i + j)
               }
@@ -173,14 +173,14 @@ fn parse_string(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError 
 
 ///| Parse array literal
 fn parse_array(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError {
-  if pos >= input.length() || input[pos] != b'[' {
+  if pos >= input.length() || input[pos] != '[' {
     raise ParseError("Expected opening bracket", pos)
   }
   let mut i = skip_whitespace(input, pos + 1)
   let elements : Array[Json] = []
 
   // Empty array
-  if i < input.length() && input[i] == b']' {
+  if i < input.length() && input[i] == ']' {
     return (Array(elements), i + 1)
   }
 
@@ -193,8 +193,8 @@ fn parse_array(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError {
       raise ParseError("Unterminated array", i)
     }
     match input[i] {
-      b',' => i = skip_whitespace(input, i + 1)
-      b']' => return (Array(elements), i + 1)
+      ',' => i = skip_whitespace(input, i + 1)
+      ']' => return (Array(elements), i + 1)
       _ => raise ParseError("Expected comma or closing bracket", i)
     }
   } else {
@@ -204,14 +204,14 @@ fn parse_array(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError {
 
 ///| Parse object literal
 fn parse_object(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError {
-  if pos >= input.length() || input[pos] != b'{' {
+  if pos >= input.length() || input[pos] != '{' {
     raise ParseError("Expected opening brace", pos)
   }
   let mut i = skip_whitespace(input, pos + 1)
   let obj : Map[Bytes, Json] = {}
 
   // Empty object
-  if i < input.length() && input[i] == b'}' {
+  if i < input.length() && input[i] == '}' {
     return (Object(obj), i + 1)
   }
 
@@ -224,7 +224,7 @@ fn parse_object(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError 
         i = skip_whitespace(input, next_pos)
 
         // Expect colon
-        if i >= input.length() || input[i] != b':' {
+        if i >= input.length() || input[i] != ':' {
           raise ParseError("Expected colon after object key", i)
         }
         i = skip_whitespace(input, i + 1)
@@ -237,8 +237,8 @@ fn parse_object(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError 
           raise ParseError("Unterminated object", i)
         }
         match input[i] {
-          b',' => i = skip_whitespace(input, i + 1)
-          b'}' => return (Object(obj), i + 1)
+          ',' => i = skip_whitespace(input, i + 1)
+          '}' => return (Object(obj), i + 1)
           _ => raise ParseError("Expected comma or closing brace", i)
         }
       }
