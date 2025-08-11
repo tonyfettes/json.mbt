@@ -200,8 +200,7 @@ test "string_with_backspace" {
 ///|
 test "string_with_form_feed" {
   assert_true(
-    @json.parse("\"page1\\fpage2\"")
-    is @json.Json::String("page1\x0Cpage2"),
+    @json.parse("\"page1\\fpage2\"") is @json.Json::String("page1\x0Cpage2"),
   )
 }
 
@@ -304,8 +303,7 @@ test "string_with_escapes" {
 ///|
 test "string_with_quotes" {
   assert_true(
-    @json.parse("\"Say \\\"hello\\\"\"")
-    is @json.Json::String("Say \"hello\""),
+    @json.parse("\"Say \\\"hello\\\"\"") is @json.Json::String("Say \"hello\""),
   )
 }
 
