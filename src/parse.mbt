@@ -43,12 +43,11 @@ fn Parser::peek_at(self : Parser, offset : Int) -> Byte? {
 
 ///|
 fn Parser::skip_whitespace(self : Parser) -> Unit {
-  while self.pos < self.len {
-    match self.peek() {
-      Some(' ' | '\t' | '\n' | '\r') => self.pos = self.pos + 1
-      _ => break
-    }
+  let view = loop self.view() {
+    [' ' | '\t' | '\n' | '\r', .. view] => continue view
+    [.. view] => view
   }
+  self.pos = view.start_offset()
 }
 
 ///|
