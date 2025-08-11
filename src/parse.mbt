@@ -64,21 +64,22 @@ fn[Number : Number] Parser::parse_value(
       Bool(false)
     }
     ['"', .. view] => {
+      self.update(view)
       let buffer = @buffer.new()
-      self.update(Parser::parse_string(view, buffer))
+      self.parse_string(buffer)
       String(buffer.contents())
     }
     ['[', .. view] => {
       self.update(view)
-      let elements = []
-      self.parse_array(elements)
-      Array(elements)
+      let array = []
+      self.parse_array(array)
+      Array(array)
     }
     ['{', .. view] => {
       self.update(view)
-      let obj = {}
-      self.parse_object(obj)
-      Object(obj)
+      let object_ = {}
+      self.parse_object(object_)
+      Object(object_)
     }
     ['-' | '0'..='9', ..] => Number(self.parse_number())
     [..] => raise ParseError("Unexpected character", self.pos)
@@ -162,10 +163,10 @@ fn[Number : Number] Parser::parse_number(
 
 ///|
 fn Parser::parse_string(
-  view : @bytes.View,
+  self : Parser,
   buffer : @buffer.T,
-) -> @bytes.View raise ParseError {
-  loop view {
+) -> Unit raise ParseError {
+  let view = loop self.view() {
     // Handle closing quote
     ['"', .. view] => break view
     [
@@ -259,6 +260,7 @@ fn Parser::parse_string(
     }
     [] as view => raise ParseError("Unterminated string", view.start_offset())
   }
+  self.update(view)
 }
 
 ///|
@@ -309,8 +311,9 @@ fn[Number : Number] Parser::parse_object(
       return
     }
     ['"', .. view] => {
+      self.update(view)
       let buffer = @buffer.new()
-      self.update(Parser::parse_string(view, buffer))
+      self.parse_string(buffer)
       let key = buffer.contents()
       self.skip_whitespace()
 
