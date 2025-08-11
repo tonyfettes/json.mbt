@@ -23,15 +23,6 @@ fn Parser::view(self : Parser) -> @bytes.View {
 }
 
 ///|
-fn Parser::skip_whitespace(self : Parser) -> Unit {
-  while self.pos < self.len {
-    match self.data[self.pos] {
-      ' ' | '\t' | '\n' | '\r' => self.pos = self.pos + 1
-      _ => break
-    }
-  }
-}
-
 fn Parser::peek(self : Parser) -> Byte? {
   if self.pos >= self.len {
     None
@@ -41,29 +32,50 @@ fn Parser::peek(self : Parser) -> Byte? {
 }
 
 ///|
+fn Parser::peek_at(self : Parser, offset : Int) -> Byte? {
+  let target_pos = self.pos + offset
+  if target_pos >= self.len {
+    None
+  } else {
+    Some(self.data[target_pos])
+  }
+}
+
+///|
+fn Parser::skip_whitespace(self : Parser) -> Unit {
+  while self.pos < self.len {
+    match self.peek() {
+      Some(' ' | '\t' | '\n' | '\r') => self.pos = self.pos + 1
+      _ => break
+    }
+  }
+}
+
+///|
 fn Parser::parse_value(self : Parser) -> Json raise ParseError {
   self.skip_whitespace()
   if self.pos >= self.len {
     raise ParseError("Unexpected end of input", self.pos)
   }
-  match self.data[self.pos] {
-    'n' => self.parse_null()
-    't' | 'f' => self.parse_bool()
-    '"' => self.parse_string()
-    '[' => self.parse_array()
-    '{' => self.parse_object()
-    '-' | '0'..='9' => self.parse_number()
-    _ => raise ParseError("Unexpected character", self.pos)
+  match self.peek() {
+    Some('n') => self.parse_null()
+    Some('t' | 'f') => self.parse_bool()
+    Some('"') => self.parse_string()
+    Some('[') => self.parse_array()
+    Some('{') => self.parse_object()
+    Some('-' | '0'..='9') => self.parse_number()
+    Some(_) => raise ParseError("Unexpected character", self.pos)
+    None => raise ParseError("Unexpected end of input", self.pos)
   }
 }
 
 ///|
 fn Parser::parse_null(self : Parser) -> Json raise ParseError {
   if self.pos + 4 <= self.len &&
-    self.data[self.pos] == 'n' &&
-    self.data[self.pos + 1] == 'u' &&
-    self.data[self.pos + 2] == 'l' &&
-    self.data[self.pos + 3] == 'l' {
+    self.peek_at(0) == Some('n') &&
+    self.peek_at(1) == Some('u') &&
+    self.peek_at(2) == Some('l') &&
+    self.peek_at(3) == Some('l') {
     self.pos = self.pos + 4
     Null
   } else {
@@ -74,18 +86,18 @@ fn Parser::parse_null(self : Parser) -> Json raise ParseError {
 ///|
 fn Parser::parse_bool(self : Parser) -> Json raise ParseError {
   if self.pos + 4 <= self.len &&
-    self.data[self.pos] == 't' &&
-    self.data[self.pos + 1] == 'r' &&
-    self.data[self.pos + 2] == 'u' &&
-    self.data[self.pos + 3] == 'e' {
+    self.peek_at(0) == Some('t') &&
+    self.peek_at(1) == Some('r') &&
+    self.peek_at(2) == Some('u') &&
+    self.peek_at(3) == Some('e') {
     self.pos = self.pos + 4
     Bool(true)
   } else if self.pos + 5 <= self.len &&
-    self.data[self.pos] == 'f' &&
-    self.data[self.pos + 1] == 'a' &&
-    self.data[self.pos + 2] == 'l' &&
-    self.data[self.pos + 3] == 's' &&
-    self.data[self.pos + 4] == 'e' {
+    self.peek_at(0) == Some('f') &&
+    self.peek_at(1) == Some('a') &&
+    self.peek_at(2) == Some('l') &&
+    self.peek_at(3) == Some('s') &&
+    self.peek_at(4) == Some('e') {
     self.pos = self.pos + 5
     Bool(false)
   } else {
@@ -98,7 +110,7 @@ fn Parser::parse_number(self : Parser) -> Json raise ParseError {
   let start = self.pos
 
   // Optional minus sign
-  if self.pos < self.len && self.data[self.pos] == '-' {
+  if self.peek() == Some('-') {
     self.pos = self.pos + 1
   }
   if self.pos >= self.len {
@@ -106,108 +118,111 @@ fn Parser::parse_number(self : Parser) -> Json raise ParseError {
   }
 
   // Integer part
-  if self.data[self.pos] == '0' {
-    self.pos = self.pos + 1
-  } else if self.data[self.pos] >= '1' && self.data[self.pos] <= '9' {
-    self.pos = self.pos + 1
-    while self.pos < self.len &&
-          self.data[self.pos] >= '0' &&
-          self.data[self.pos] <= '9' {
+  match self.peek() {
+    Some('0') => self.pos = self.pos + 1
+    Some('1'..='9') => {
       self.pos = self.pos + 1
+      while self.pos < self.len {
+        match self.peek() {
+          Some('0'..='9') => self.pos = self.pos + 1
+          _ => break
+        }
+      }
     }
-  } else {
-    raise ParseError("Invalid number: invalid digit", start)
+    _ => raise ParseError("Invalid number: invalid digit", start)
   }
 
   // Optional fractional part
-  if self.pos < self.len && self.data[self.pos] == '.' {
+  if self.peek() == Some('.') {
     self.pos = self.pos + 1
-    if self.pos >= self.len ||
-      self.data[self.pos] < '0' ||
-      self.data[self.pos] > '9' {
-      raise ParseError("Invalid number: missing fractional digits", start)
-    }
-    while self.pos < self.len &&
-          self.data[self.pos] >= '0' &&
-          self.data[self.pos] <= '9' {
-      self.pos = self.pos + 1
+    match self.peek() {
+      Some('0'..='9') => {
+        self.pos = self.pos + 1
+        while self.pos < self.len {
+          match self.peek() {
+            Some('0'..='9') => self.pos = self.pos + 1
+            _ => break
+          }
+        }
+      }
+      _ => raise ParseError("Invalid number: missing fractional digits", start)
     }
   }
 
   // Optional exponent part
-  if self.pos < self.len &&
-    (self.data[self.pos] == 'e' || self.data[self.pos] == 'E') {
-    self.pos = self.pos + 1
-    if self.pos < self.len &&
-      (self.data[self.pos] == '+' || self.data[self.pos] == '-') {
+  match self.peek() {
+    Some('e' | 'E') => {
       self.pos = self.pos + 1
+      if self.peek() == Some('+') || self.peek() == Some('-') {
+        self.pos = self.pos + 1
+      }
+      match self.peek() {
+        Some('0'..='9') => {
+          self.pos = self.pos + 1
+          while self.pos < self.len {
+            match self.peek() {
+              Some('0'..='9') => self.pos = self.pos + 1
+              _ => break
+            }
+          }
+        }
+        _ => raise ParseError("Invalid number: missing exponent digits", start)
+      }
     }
-    if self.pos >= self.len ||
-      self.data[self.pos] < '0' ||
-      self.data[self.pos] > '9' {
-      raise ParseError("Invalid number: missing exponent digits", start)
-    }
-    while self.pos < self.len &&
-          self.data[self.pos] >= '0' &&
-          self.data[self.pos] <= '9' {
-      self.pos = self.pos + 1
-    }
+    _ => ()
   }
-  Number(self.data[start:self.pos])
+  Number(self.view()[0:self.pos - start])
 }
 
 ///|
 fn Parser::parse_string(self : Parser) -> Json raise ParseError {
-  if self.pos >= self.len || self.data[self.pos] != '"' {
+  if self.peek() != Some('"') {
     raise ParseError("Expected opening quote", self.pos)
   }
   let start = self.pos + 1
   self.pos = self.pos + 1
   while self.pos < self.len {
-    match self.data[self.pos] {
-      '"' => {
+    match self.peek() {
+      Some('"') => {
         let content = self.data[start:self.pos]
         self.pos = self.pos + 1
         return String(content)
       }
-      '\\' => {
+      Some('\\') => {
         self.pos = self.pos + 1
-        if self.pos >= self.len {
-          raise ParseError("Unexpected end of string after escape", self.pos)
-        }
-        match self.data[self.pos] {
-          '"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't' =>
+        match self.peek() {
+          Some('"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't') =>
             self.pos = self.pos + 1
-          'u' => {
+          Some('u') => {
             self.pos = self.pos + 1
             if self.pos + 4 > self.len {
               raise ParseError("Invalid unicode escape sequence", self.pos)
             }
             // Validate 4 hex digits
             for j = 0; j < 4; j = j + 1 {
-              let c = self.data[self.pos + j]
-              if not(
-                  (c >= '0' && c <= '9') ||
-                  (c >= 'a' && c <= 'f') ||
-                  (c >= 'A' && c <= 'F'),
-                ) {
-                raise ParseError(
-                  "Invalid unicode escape sequence",
-                  self.pos + j,
-                )
+              match self.peek_at(j) {
+                Some('0'..='9' | 'a'..='f' | 'A'..='F') => ()
+                _ =>
+                  raise ParseError(
+                    "Invalid unicode escape sequence",
+                    self.pos + j,
+                  )
               }
             }
             self.pos = self.pos + 4
           }
-          _ => raise ParseError("Invalid escape sequence", self.pos)
+          Some(_) => raise ParseError("Invalid escape sequence", self.pos)
+          None =>
+            raise ParseError("Unexpected end of string after escape", self.pos)
         }
       }
-      c => {
+      Some(c) => {
         if c < 0x20 {
           raise ParseError("Unescaped control character in string", self.pos)
         }
         self.pos = self.pos + 1
       }
+      None => break
     }
   }
   raise ParseError("Unterminated string", start - 1)
@@ -215,7 +230,7 @@ fn Parser::parse_string(self : Parser) -> Json raise ParseError {
 
 ///|
 fn Parser::parse_array(self : Parser) -> Json raise ParseError {
-  if self.pos >= self.len || self.data[self.pos] != '[' {
+  if self.peek() != Some('[') {
     raise ParseError("Expected opening bracket", self.pos)
   }
   self.pos = self.pos + 1
@@ -223,7 +238,7 @@ fn Parser::parse_array(self : Parser) -> Json raise ParseError {
   let elements : Array[Json] = []
 
   // Empty array
-  if self.pos < self.len && self.data[self.pos] == ']' {
+  if self.peek() == Some(']') {
     self.pos = self.pos + 1
     return Array(elements)
   }
@@ -233,19 +248,17 @@ fn Parser::parse_array(self : Parser) -> Json raise ParseError {
     let value = self.parse_value()
     elements.push(value)
     self.skip_whitespace()
-    if self.pos >= self.len {
-      raise ParseError("Unterminated array", self.pos)
-    }
-    match self.data[self.pos] {
-      ',' => {
+    match self.peek() {
+      Some(',') => {
         self.pos = self.pos + 1
         self.skip_whitespace()
       }
-      ']' => {
+      Some(']') => {
         self.pos = self.pos + 1
         return Array(elements)
       }
-      _ => raise ParseError("Expected comma or closing bracket", self.pos)
+      Some(_) => raise ParseError("Expected comma or closing bracket", self.pos)
+      None => raise ParseError("Unterminated array", self.pos)
     }
   } else {
     raise ParseError("Unexpected error in array parsing", self.pos)
@@ -254,7 +267,7 @@ fn Parser::parse_array(self : Parser) -> Json raise ParseError {
 
 ///|
 fn Parser::parse_object(self : Parser) -> Json raise ParseError {
-  if self.pos >= self.len || self.data[self.pos] != '{' {
+  if self.peek() != Some('{') {
     raise ParseError("Expected opening brace", self.pos)
   }
   self.pos = self.pos + 1
@@ -262,7 +275,7 @@ fn Parser::parse_object(self : Parser) -> Json raise ParseError {
   let obj : Map[Bytes, Json] = {}
 
   // Empty object
-  if self.pos < self.len && self.data[self.pos] == '}' {
+  if self.peek() == Some('}') {
     self.pos = self.pos + 1
     return Object(obj)
   }
@@ -276,7 +289,7 @@ fn Parser::parse_object(self : Parser) -> Json raise ParseError {
         self.skip_whitespace()
 
         // Expect colon
-        if self.pos >= self.len || self.data[self.pos] != ':' {
+        if self.peek() != Some(':') {
           raise ParseError("Expected colon after object key", self.pos)
         }
         self.pos = self.pos + 1
@@ -286,19 +299,18 @@ fn Parser::parse_object(self : Parser) -> Json raise ParseError {
         let value = self.parse_value()
         obj[[..key]] = value
         self.skip_whitespace()
-        if self.pos >= self.len {
-          raise ParseError("Unterminated object", self.pos)
-        }
-        match self.data[self.pos] {
-          ',' => {
+        match self.peek() {
+          Some(',') => {
             self.pos = self.pos + 1
             self.skip_whitespace()
           }
-          '}' => {
+          Some('}') => {
             self.pos = self.pos + 1
             return Object(obj)
           }
-          _ => raise ParseError("Expected comma or closing brace", self.pos)
+          Some(_) =>
+            raise ParseError("Expected comma or closing brace", self.pos)
+          None => raise ParseError("Unterminated object", self.pos)
         }
       }
       _ => raise ParseError("Expected string key in object", self.pos)
