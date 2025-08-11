@@ -68,12 +68,20 @@ fn[Number : Number] Parser::parse_value(
     }
     ['"', .. view] => {
       self.update(view)
-      String(self.parse_string())
+      let buffer = @buffer.new()
+      self.parse_string(buffer)
+      String(buffer.contents())
     }
-    ['[', ..] => self.parse_array()
+    ['[', ..] => {
+      let elements = []
+      self.parse_array(elements)
+      Array(elements)
+    }
     ['{', .. view] => {
       self.update(view)
-      Object(self.parse_object())
+      let obj = {}
+      self.parse_object(obj)
+      Object(obj)
     }
     ['-' | '0'..='9', ..] => self.parse_number()
     [..] => raise ParseError("Unexpected character", self.pos)
@@ -156,8 +164,10 @@ fn[Number : Number] Parser::parse_number(
 }
 
 ///|
-fn Parser::parse_string(self : Parser) -> @bytes.View raise ParseError {
-  let buffer = @buffer.new()
+fn Parser::parse_string(
+  self : Parser,
+  buffer : @buffer.T,
+) -> Unit raise ParseError {
   let final_view = loop self.view() {
     // Handle closing quote
     ['"', .. view] => break view
@@ -256,24 +266,23 @@ fn Parser::parse_string(self : Parser) -> @bytes.View raise ParseError {
     [] => raise ParseError("Unterminated string", self.view().start_offset())
   }
   self.pos = final_view.start_offset()
-  buffer.contents()
 }
 
 ///|
 fn[Number : Number] Parser::parse_array(
   self : Parser,
-) -> Json[Number] raise ParseError {
+  elements : Array[Json[Number]],
+) -> Unit raise ParseError {
   if self.peek() != Some('[') {
     raise ParseError("Expected opening bracket", self.pos)
   }
   self.pos = self.pos + 1
   self.skip_whitespace()
-  let elements : Array[Json[Number]] = []
 
   // Empty array
   if self.peek() == Some(']') {
     self.pos = self.pos + 1
-    return Array(elements)
+    return
   }
 
   // Parse elements
@@ -288,7 +297,7 @@ fn[Number : Number] Parser::parse_array(
       }
       Some(']') => {
         self.pos = self.pos + 1
-        return Array(elements)
+        return
       }
       Some(_) => raise ParseError("Expected comma or closing bracket", self.pos)
       None => raise ParseError("Unterminated array", self.pos)
@@ -301,17 +310,19 @@ fn[Number : Number] Parser::parse_array(
 ///|
 fn[Number : Number] Parser::parse_object(
   self : Parser,
-) -> Map[Bytes, Json[Number]] raise ParseError {
+  obj : Map[Bytes, Json[Number]],
+) -> Unit raise ParseError {
   self.skip_whitespace()
-  let obj : Map[Bytes, Json[Number]] = {}
   loop self.view() {
     ['}', .. view] => {
       self.update(view)
-      return obj
+      return
     }
     ['"', .. view] => {
       self.update(view)
-      let key = self.parse_string()
+      let buffer = @buffer.new()
+      self.parse_string(buffer)
+      let key = buffer.contents()
       self.skip_whitespace()
 
       // Expect colon
@@ -333,7 +344,7 @@ fn[Number : Number] Parser::parse_object(
         }
         Some('}') => {
           self.pos = self.pos + 1
-          return obj
+          return
         }
         Some(_) => raise ParseError("Expected comma or closing brace", self.pos)
         None => raise ParseError("Unterminated object", self.pos)
