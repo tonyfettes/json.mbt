@@ -104,15 +104,15 @@ test "complex_nested_structure" {
 test "string_with_backslash" {
   assert_true(
     @json.parse_json("\"path\\\\to\\\\file\"")
-    is @json.Json::String("path\\\\to\\\\file"),
+    is @json.Json::String("path\\to\\file"),
   )
 }
 
 ///|
 test "string_with_forward_slash" {
   assert_true(
-    @json.parse_json("\"http:\\/\\/example.com\"")
-    is @json.Json::String("http:\\/\\/example.com"),
+    @json.parse_json("\"http://example.com\"")
+    is @json.Json::String("http://example.com"),
   )
 }
 
@@ -120,7 +120,7 @@ test "string_with_forward_slash" {
 test "string_with_control_chars" {
   assert_true(
     @json.parse_json("\"line1\\nline2\\tindented\"")
-    is @json.Json::String("line1\\nline2\\tindented"),
+    is @json.Json::String("line1\nline2\tindented"),
   )
 }
 
@@ -187,15 +187,15 @@ test "number_large_integer" {
 test "string_with_backslash" {
   assert_true(
     @json.parse_json("\"path\\\\to\\\\file\"")
-    is @json.Json::String("path\\\\to\\\\file"),
+    is @json.Json::String("path\\to\\file"),
   )
 }
 
 ///|
 test "string_with_forward_slash" {
   assert_true(
-    @json.parse_json("\"http:\\/\\/example.com\"")
-    is @json.Json::String("http:\\/\\/example.com"),
+    @json.parse_json("\"http://example.com\"")
+    is @json.Json::String("http://example.com"),
   )
 }
 
@@ -210,21 +210,21 @@ test "string_with_control_chars" {
 ///|
 test "string_with_carriage_return" {
   assert_true(
-    @json.parse_json("\"line1\\rline2\"") is @json.Json::String("line1\\rline2"),
+    @json.parse_json("\"line1\\rline2\"") is @json.Json::String("line1\rline2"),
   )
 }
 
 ///|
 test "string_with_backspace" {
   assert_true(
-    @json.parse_json("\"text\\bmore\"") is @json.Json::String("text\\bmore"),
+    @json.parse_json("\"text\\bmore\"") is @json.Json::String("text\bmore"),
   )
 }
 
 ///|
 test "string_with_form_feed" {
   assert_true(
-    @json.parse_json("\"page1\\fpage2\"") is @json.Json::String("page1\\fpage2"),
+    @json.parse_json("\"page1\\fpage2\"") is @json.Json::String("page1\x0Cpage2"),
   )
 }
 

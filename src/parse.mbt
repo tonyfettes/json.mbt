@@ -71,37 +71,27 @@ fn Parser::parse_value(self : Parser) -> Json raise ParseError {
 
 ///|
 fn Parser::parse_null(self : Parser) -> Json raise ParseError {
-  if self.pos + 4 <= self.len &&
-    self.peek_at(0) == Some('n') &&
-    self.peek_at(1) == Some('u') &&
-    self.peek_at(2) == Some('l') &&
-    self.peek_at(3) == Some('l') {
-    self.pos = self.pos + 4
-    Null
-  } else {
-    raise ParseError("Invalid null literal", self.pos)
+  match self.view() {
+    [.. "null", .. view] => {
+      self.pos = view.start_offset()
+      Null
+    }
+    [..] => raise ParseError("Invalid null literal", self.pos)
   }
 }
 
 ///|
 fn Parser::parse_bool(self : Parser) -> Json raise ParseError {
-  if self.pos + 4 <= self.len &&
-    self.peek_at(0) == Some('t') &&
-    self.peek_at(1) == Some('r') &&
-    self.peek_at(2) == Some('u') &&
-    self.peek_at(3) == Some('e') {
-    self.pos = self.pos + 4
-    Bool(true)
-  } else if self.pos + 5 <= self.len &&
-    self.peek_at(0) == Some('f') &&
-    self.peek_at(1) == Some('a') &&
-    self.peek_at(2) == Some('l') &&
-    self.peek_at(3) == Some('s') &&
-    self.peek_at(4) == Some('e') {
-    self.pos = self.pos + 5
-    Bool(false)
-  } else {
-    raise ParseError("Invalid boolean literal", self.pos)
+  match self.view() {
+    [.. "true", .. view] => {
+      self.pos = view.start_offset()
+      Bool(true)
+    }
+    [.. "false", .. view] => {
+      self.pos = view.start_offset()
+      Bool(false)
+    }
+    [..] => raise ParseError("Invalid boolean literal", self.pos)
   }
 }
 
@@ -171,7 +161,7 @@ fn Parser::parse_number(self : Parser) -> Json raise ParseError {
     }
     _ => ()
   }
-  Number(self.view()[0:self.pos - start])
+  Number(self.data[start:self.pos])
 }
 
 ///|
@@ -179,30 +169,73 @@ fn Parser::parse_string(self : Parser) -> Json raise ParseError {
   if self.peek() != Some('"') {
     raise ParseError("Expected opening quote", self.pos)
   }
-  let start = self.pos + 1
-  self.pos = self.pos + 1
+  self.pos = self.pos + 1 // Skip opening quote
+  let buffer = @buffer.new()
   while self.pos < self.len {
     match self.peek() {
       Some('"') => {
-        let content = self.data[start:self.pos]
-        self.pos = self.pos + 1
-        return String(content)
+        self.pos = self.pos + 1 // Skip closing quote
+        return String(buffer.contents())
       }
       Some('\\') => {
-        self.pos = self.pos + 1
+        self.pos = self.pos + 1 // Skip backslash
         match self.peek() {
-          Some('"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't') =>
+          Some('"') => {
+            buffer.write_byte(b'"')
             self.pos = self.pos + 1
+          }
+          Some('\\') => {
+            buffer.write_byte(b'\\')
+            self.pos = self.pos + 1
+          }
+          Some('/') => {
+            buffer.write_byte(b'/')
+            self.pos = self.pos + 1
+          }
+          Some('b') => {
+            buffer.write_byte(b'\b')
+            self.pos = self.pos + 1
+          }
+          Some('f') => {
+            buffer.write_byte(b'\x0C') // Form feed
+            self.pos = self.pos + 1
+          }
+          Some('n') => {
+            buffer.write_byte(b'\n')
+            self.pos = self.pos + 1
+          }
+          Some('r') => {
+            buffer.write_byte(b'\r')
+            self.pos = self.pos + 1
+          }
+          Some('t') => {
+            buffer.write_byte(b'\t')
+            self.pos = self.pos + 1
+          }
           Some('u') => {
-            self.pos = self.pos + 1
+            self.pos = self.pos + 1 // Skip 'u'
             if self.pos + 4 > self.len {
               raise ParseError("Invalid unicode escape sequence", self.pos)
             }
-            // Validate 4 hex digits
+
+            // Parse 4 hex digits
+            let mut code_point = 0
             for j = 0; j < 4; j = j + 1 {
               match self.peek_at(j) {
-                Some('0'..='9' | 'a'..='f' | 'A'..='F') => ()
-                _ =>
+                Some(c) => {
+                  let digit = match c {
+                    '0'..='9' => (c - '0').to_int()
+                    'a'..='f' => (c - 'a').to_int() + 10
+                    'A'..='F' => (c - 'A').to_int() + 10
+                    _ =>
+                      raise ParseError(
+                        "Invalid unicode escape sequence",
+                        self.pos + j,
+                      )
+                  }
+                  code_point = code_point * 16 + digit
+                }
+                None =>
                   raise ParseError(
                     "Invalid unicode escape sequence",
                     self.pos + j,
@@ -210,6 +243,18 @@ fn Parser::parse_string(self : Parser) -> Json raise ParseError {
               }
             }
             self.pos = self.pos + 4
+
+            // Convert Unicode code point to UTF-8 bytes
+            if code_point <= 0x7F {
+              buffer.write_byte(code_point.to_byte())
+            } else if code_point <= 0x7FF {
+              buffer.write_byte((0xC0 | (code_point >> 6)).to_byte())
+              buffer.write_byte((0x80 | (code_point & 0x3F)).to_byte())
+            } else {
+              buffer.write_byte((0xE0 | (code_point >> 12)).to_byte())
+              buffer.write_byte((0x80 | ((code_point >> 6) & 0x3F)).to_byte())
+              buffer.write_byte((0x80 | (code_point & 0x3F)).to_byte())
+            }
           }
           Some(_) => raise ParseError("Invalid escape sequence", self.pos)
           None =>
@@ -220,12 +265,13 @@ fn Parser::parse_string(self : Parser) -> Json raise ParseError {
         if c < 0x20 {
           raise ParseError("Unescaped control character in string", self.pos)
         }
+        buffer.write_byte(c)
         self.pos = self.pos + 1
       }
       None => break
     }
   }
-  raise ParseError("Unterminated string", start - 1)
+  raise ParseError("Unterminated string", self.pos - 1)
 }
 
 ///|
