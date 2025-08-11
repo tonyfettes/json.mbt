@@ -41,7 +41,9 @@ fn Parser::skip_whitespace(self : Parser) -> Unit {
 }
 
 ///|
-fn Parser::parse_value(self : Parser) -> Json raise ParseError {
+fn[Number : Number] Parser::parse_value(
+  self : Parser,
+) -> Json[Number] raise ParseError {
   self.skip_whitespace()
   if self.pos >= self.len {
     raise ParseError("Unexpected end of input", self.pos)
@@ -59,7 +61,7 @@ fn Parser::parse_value(self : Parser) -> Json raise ParseError {
 }
 
 ///|
-fn Parser::parse_null(self : Parser) -> Json raise ParseError {
+fn[Number] Parser::parse_null(self : Parser) -> Json[Number] raise ParseError {
   match self.view() {
     [.. "null", .. view] => {
       self.pos = view.start_offset()
@@ -70,7 +72,7 @@ fn Parser::parse_null(self : Parser) -> Json raise ParseError {
 }
 
 ///|
-fn Parser::parse_bool(self : Parser) -> Json raise ParseError {
+fn[Number] Parser::parse_bool(self : Parser) -> Json[Number] raise ParseError {
   match self.view() {
     [.. "true", .. view] => {
       self.pos = view.start_offset()
@@ -85,7 +87,9 @@ fn Parser::parse_bool(self : Parser) -> Json raise ParseError {
 }
 
 ///|
-fn Parser::parse_number(self : Parser) -> Json raise ParseError {
+fn[Number : Number] Parser::parse_number(
+  self : Parser,
+) -> Json[Number] raise ParseError {
   let start = self.pos
 
   // Optional minus sign
@@ -150,11 +154,15 @@ fn Parser::parse_number(self : Parser) -> Json raise ParseError {
     }
     _ => ()
   }
-  Number(self.data[start:self.pos])
+  if Number::parse(self.data[start:self.pos]) is Some(number) {
+    return Json::Number(number)
+  } else {
+    raise ParseError("Invalid number format", start)
+  }
 }
 
 ///|
-fn Parser::parse_string(self : Parser) -> Json raise ParseError {
+fn[Number] Parser::parse_string(self : Parser) -> Json[Number] raise ParseError {
   if self.peek() != Some('"') {
     raise ParseError("Expected opening quote", self.pos)
   }
@@ -262,13 +270,15 @@ fn Parser::parse_string(self : Parser) -> Json raise ParseError {
 }
 
 ///|
-fn Parser::parse_array(self : Parser) -> Json raise ParseError {
+fn[Number : Number] Parser::parse_array(
+  self : Parser,
+) -> Json[Number] raise ParseError {
   if self.peek() != Some('[') {
     raise ParseError("Expected opening bracket", self.pos)
   }
   self.pos = self.pos + 1
   self.skip_whitespace()
-  let elements : Array[Json] = []
+  let elements : Array[Json[Number]] = []
 
   // Empty array
   if self.peek() == Some(']') {
@@ -299,13 +309,15 @@ fn Parser::parse_array(self : Parser) -> Json raise ParseError {
 }
 
 ///|
-fn Parser::parse_object(self : Parser) -> Json raise ParseError {
+fn[Number : Number] Parser::parse_object(
+  self : Parser,
+) -> Json[Number] raise ParseError {
   if self.peek() != Some('{') {
     raise ParseError("Expected opening brace", self.pos)
   }
   self.pos = self.pos + 1
   self.skip_whitespace()
-  let obj : Map[Bytes, Json] = {}
+  let obj : Map[Bytes, Json[Number]] = {}
 
   // Empty object
   if self.peek() == Some('}') {
@@ -316,7 +328,7 @@ fn Parser::parse_object(self : Parser) -> Json raise ParseError {
   // Parse key-value pairs
   while true {
     // Parse key (must be string)
-    let key_json = self.parse_string()
+    let key_json : Json[Number] = self.parse_string()
     match key_json {
       String(key) => {
         self.skip_whitespace()
@@ -354,7 +366,9 @@ fn Parser::parse_object(self : Parser) -> Json raise ParseError {
 }
 
 ///| Main parsing function that takes a @bytes.View and returns Json
-pub fn parse_json(input : @bytes.View) -> Json raise ParseError {
+pub fn[Number : Number] parse_json(
+  input : @bytes.View,
+) -> Json[Number] raise ParseError {
   let parser = Parser::new(input)
   let value = parser.parse_value()
   parser.skip_whitespace()
