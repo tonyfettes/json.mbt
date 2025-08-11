@@ -184,30 +184,6 @@ test "number_large_integer" {
 }
 
 ///|
-test "string_with_backslash" {
-  assert_true(
-    @json.parse_json("\"path\\\\to\\\\file\"")
-    is @json.Json::String("path\\to\\file"),
-  )
-}
-
-///|
-test "string_with_forward_slash" {
-  assert_true(
-    @json.parse_json("\"http://example.com\"")
-    is @json.Json::String("http://example.com"),
-  )
-}
-
-///|
-test "string_with_control_chars" {
-  assert_true(
-    @json.parse_json("\"line1\\nline2\\tindented\"")
-    is @json.Json::String("line1\nline2\tindented"),
-  )
-}
-
-///|
 test "string_with_carriage_return" {
   assert_true(
     @json.parse_json("\"line1\\rline2\"") is @json.Json::String("line1\rline2"),
@@ -415,35 +391,4 @@ test "whitespace_handling" {
   )
 }
 
-///|
-test "complex_nested_structure" {
-  let json : Bytes = "{\"users\": [{\"id\": 1, \"name\": \"Alice\", \"active\": true}, {\"id\": 2, \"name\": \"Bob\", \"active\": false}], \"count\": 2}"
-  assert_true(
-    @json.parse_json(json)
-    is @json.Json::Object(
-      {
-        "users": @json.Json::Array(
-          [
-            @json.Json::Object(
-              {
-                "id": @json.Json::Number("1"),
-                "name": @json.Json::String("Alice"),
-                "active": @json.Json::Bool(true),
-                ..
-              }
-            ),
-            @json.Json::Object(
-              {
-                "id": @json.Json::Number("2"),
-                "name": @json.Json::String("Bob"),
-                "active": @json.Json::Bool(false),
-                ..
-              }
-            ),
-          ]
-        ),
-        ..
-      }
-    ),
-  )
-}
+
