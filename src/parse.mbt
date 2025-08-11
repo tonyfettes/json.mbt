@@ -208,7 +208,7 @@ fn parse_object(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError 
     raise ParseError("Expected opening brace", pos)
   }
   let mut i = skip_whitespace(input, pos + 1)
-  let obj : Map[String, Json] = {}
+  let obj : Map[Bytes, Json] = {}
 
   // Empty object
   if i < input.length() && input[i] == b'}' {
@@ -220,8 +220,7 @@ fn parse_object(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError 
     // Parse key (must be string)
     let (key_json, next_pos) = parse_string(input, i)
     match key_json {
-      String(key_view) => {
-        let key = key_view.to_string()
+      String(key) => {
         i = skip_whitespace(input, next_pos)
 
         // Expect colon
@@ -232,7 +231,7 @@ fn parse_object(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError 
 
         // Parse value
         let (value, next_pos) = parse_value(input, i)
-        obj[key] = value
+        obj[[..key]] = value
         i = skip_whitespace(input, next_pos)
         if i >= input.length() {
           raise ParseError("Unterminated object", i)
@@ -251,16 +250,12 @@ fn parse_object(input : @bytes.View, pos : Int) -> (Json, Int) raise ParseError 
 }
 
 ///| Main parsing function that takes a @bytes.View and returns Json
-pub fn parse_json(input : @bytes.View) -> Result[Json, String] {
-  try {
-    let (value, final_pos) = parse_value(input, 0)
-    let final_pos = skip_whitespace(input, final_pos)
-    if final_pos < input.length() {
-      Err("Unexpected content after JSON value")
-    } else {
-      Ok(value)
-    }
-  } catch {
-    ParseError(msg, pos) => Err("Parse error at position \{pos}: \{msg}")
+pub fn parse_json(input : @bytes.View) -> Json raise ParseError {
+  let (value, final_pos) = parse_value(input, 0)
+  let final_pos = skip_whitespace(input, final_pos)
+  if final_pos < input.length() {
+    raise ParseError("Unexpected content after JSON value", final_pos)
+  } else {
+    value
   }
 }
