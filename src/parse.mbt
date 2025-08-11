@@ -41,6 +41,11 @@ fn Parser::skip_whitespace(self : Parser) -> Unit {
 }
 
 ///|
+fn Parser::update(self : Parser, view : @bytes.View) -> Unit {
+  self.pos = view.start_offset()
+}
+
+///|
 fn[Number : Number] Parser::parse_value(
   self : Parser,
 ) -> Json[Number] raise ParseError {
@@ -48,41 +53,30 @@ fn[Number : Number] Parser::parse_value(
   if self.pos >= self.len {
     raise ParseError("Unexpected end of input", self.pos)
   }
-  match self.peek() {
-    Some('n') => self.parse_null()
-    Some('t' | 'f') => self.parse_bool()
-    Some('"') => self.parse_string()
-    Some('[') => self.parse_array()
-    Some('{') => self.parse_object()
-    Some('-' | '0'..='9') => self.parse_number()
-    Some(_) => raise ParseError("Unexpected character", self.pos)
-    None => raise ParseError("Unexpected end of input", self.pos)
-  }
-}
-
-///|
-fn[Number] Parser::parse_null(self : Parser) -> Json[Number] raise ParseError {
   match self.view() {
     [.. "null", .. view] => {
-      self.pos = view.start_offset()
+      self.update(view)
       Null
     }
-    [..] => raise ParseError("Invalid null literal", self.pos)
-  }
-}
-
-///|
-fn[Number] Parser::parse_bool(self : Parser) -> Json[Number] raise ParseError {
-  match self.view() {
     [.. "true", .. view] => {
-      self.pos = view.start_offset()
+      self.update(view)
       Bool(true)
     }
     [.. "false", .. view] => {
-      self.pos = view.start_offset()
+      self.update(view)
       Bool(false)
     }
-    [..] => raise ParseError("Invalid boolean literal", self.pos)
+    ['"', .. view] => {
+      self.update(view)
+      String(self.parse_string())
+    }
+    ['[', ..] => self.parse_array()
+    ['{', .. view] => {
+      self.update(view)
+      Object(self.parse_object())
+    }
+    ['-' | '0'..='9', ..] => self.parse_number()
+    [..] => raise ParseError("Unexpected character", self.pos)
   }
 }
 
@@ -162,11 +156,7 @@ fn[Number : Number] Parser::parse_number(
 }
 
 ///|
-fn[Number] Parser::parse_string(self : Parser) -> Json[Number] raise ParseError {
-  if self.peek() != Some('"') {
-    raise ParseError("Expected opening quote", self.pos)
-  }
-  self.pos = self.pos + 1 // Skip opening quote
+fn Parser::parse_string(self : Parser) -> @bytes.View raise ParseError {
   let buffer = @buffer.new()
   let final_view = loop self.view() {
     // Handle closing quote
@@ -266,7 +256,7 @@ fn[Number] Parser::parse_string(self : Parser) -> Json[Number] raise ParseError 
     [] => raise ParseError("Unterminated string", self.view().start_offset())
   }
   self.pos = final_view.start_offset()
-  String(buffer.contents())
+  buffer.contents()
 }
 
 ///|
@@ -311,62 +301,50 @@ fn[Number : Number] Parser::parse_array(
 ///|
 fn[Number : Number] Parser::parse_object(
   self : Parser,
-) -> Json[Number] raise ParseError {
-  if self.peek() != Some('{') {
-    raise ParseError("Expected opening brace", self.pos)
-  }
-  self.pos = self.pos + 1
+) -> Map[Bytes, Json[Number]] raise ParseError {
   self.skip_whitespace()
   let obj : Map[Bytes, Json[Number]] = {}
-
-  // Empty object
-  if self.peek() == Some('}') {
-    self.pos = self.pos + 1
-    return Object(obj)
-  }
-
-  // Parse key-value pairs
-  while true {
-    // Parse key (must be string)
-    let key_json : Json[Number] = self.parse_string()
-    match key_json {
-      String(key) => {
-        self.skip_whitespace()
-
-        // Expect colon
-        if self.peek() != Some(':') {
-          raise ParseError("Expected colon after object key", self.pos)
-        }
-        self.pos = self.pos + 1
-        self.skip_whitespace()
-
-        // Parse value
-        let value = self.parse_value()
-        obj[[..key]] = value
-        self.skip_whitespace()
-        match self.peek() {
-          Some(',') => {
-            self.pos = self.pos + 1
-            self.skip_whitespace()
-          }
-          Some('}') => {
-            self.pos = self.pos + 1
-            return Object(obj)
-          }
-          Some(_) =>
-            raise ParseError("Expected comma or closing brace", self.pos)
-          None => raise ParseError("Unterminated object", self.pos)
-        }
-      }
-      _ => raise ParseError("Expected string key in object", self.pos)
+  loop self.view() {
+    ['}', .. view] => {
+      self.update(view)
+      return obj
     }
-  } else {
-    raise ParseError("Unexpected error in object parsing", self.pos)
+    ['"', .. view] => {
+      self.update(view)
+      let key = self.parse_string()
+      self.skip_whitespace()
+
+      // Expect colon
+      if self.peek() != Some(':') {
+        raise ParseError("Expected colon after object key", self.pos)
+      }
+      self.pos = self.pos + 1
+      self.skip_whitespace()
+
+      // Parse value
+      let value = self.parse_value()
+      obj[[..key]] = value
+      self.skip_whitespace()
+      match self.peek() {
+        Some(',') => {
+          self.pos = self.pos + 1
+          self.skip_whitespace()
+          continue self.view()
+        }
+        Some('}') => {
+          self.pos = self.pos + 1
+          return obj
+        }
+        Some(_) => raise ParseError("Expected comma or closing brace", self.pos)
+        None => raise ParseError("Unterminated object", self.pos)
+      }
+    }
+    [..] => raise ParseError("Invalid object key", self.pos)
   }
 }
 
 ///| Main parsing function that takes a @bytes.View and returns Json
-pub fn[Number : Number] parse_json(
+pub fn[Number : Number] parse(
   input : @bytes.View,
 ) -> Json[Number] raise ParseError {
   let parser = Parser::new(input)
