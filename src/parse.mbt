@@ -32,16 +32,6 @@ fn Parser::peek(self : Parser) -> Byte? {
 }
 
 ///|
-fn Parser::peek_at(self : Parser, offset : Int) -> Byte? {
-  let target_pos = self.pos + offset
-  if target_pos >= self.len {
-    None
-  } else {
-    Some(self.data[target_pos])
-  }
-}
-
-///|
 fn Parser::skip_whitespace(self : Parser) -> Unit {
   let view = loop self.view() {
     [' ' | '\t' | '\n' | '\r', .. view] => continue view
@@ -170,107 +160,105 @@ fn Parser::parse_string(self : Parser) -> Json raise ParseError {
   }
   self.pos = self.pos + 1 // Skip opening quote
   let buffer = @buffer.new()
-  while self.pos < self.len {
-    match self.peek() {
-      Some('"') => {
-        self.pos = self.pos + 1 // Skip closing quote
-        return String(buffer.contents())
-      }
-      Some('\\') => {
-        self.pos = self.pos + 1 // Skip backslash
-        match self.peek() {
-          Some('"') => {
-            buffer.write_byte(b'"')
-            self.pos = self.pos + 1
-          }
-          Some('\\') => {
-            buffer.write_byte(b'\\')
-            self.pos = self.pos + 1
-          }
-          Some('/') => {
-            buffer.write_byte(b'/')
-            self.pos = self.pos + 1
-          }
-          Some('b') => {
-            buffer.write_byte(b'\b')
-            self.pos = self.pos + 1
-          }
-          Some('f') => {
-            buffer.write_byte(b'\x0C') // Form feed
-            self.pos = self.pos + 1
-          }
-          Some('n') => {
-            buffer.write_byte(b'\n')
-            self.pos = self.pos + 1
-          }
-          Some('r') => {
-            buffer.write_byte(b'\r')
-            self.pos = self.pos + 1
-          }
-          Some('t') => {
-            buffer.write_byte(b'\t')
-            self.pos = self.pos + 1
-          }
-          Some('u') => {
-            self.pos = self.pos + 1 // Skip 'u'
-            if self.pos + 4 > self.len {
-              raise ParseError("Invalid unicode escape sequence", self.pos)
-            }
-
-            // Parse 4 hex digits
-            let mut code_point = 0
-            for j = 0; j < 4; j = j + 1 {
-              match self.peek_at(j) {
-                Some(c) => {
-                  let digit = match c {
-                    '0'..='9' => (c - '0').to_int()
-                    'a'..='f' => (c - 'a').to_int() + 10
-                    'A'..='F' => (c - 'A').to_int() + 10
-                    _ =>
-                      raise ParseError(
-                        "Invalid unicode escape sequence",
-                        self.pos + j,
-                      )
-                  }
-                  code_point = code_point * 16 + digit
-                }
-                None =>
-                  raise ParseError(
-                    "Invalid unicode escape sequence",
-                    self.pos + j,
-                  )
-              }
-            }
-            self.pos = self.pos + 4
-
-            // Convert Unicode code point to UTF-8 bytes
-            if code_point <= 0x7F {
-              buffer.write_byte(code_point.to_byte())
-            } else if code_point <= 0x7FF {
-              buffer.write_byte((0xC0 | (code_point >> 6)).to_byte())
-              buffer.write_byte((0x80 | (code_point & 0x3F)).to_byte())
-            } else {
-              buffer.write_byte((0xE0 | (code_point >> 12)).to_byte())
-              buffer.write_byte((0x80 | ((code_point >> 6) & 0x3F)).to_byte())
-              buffer.write_byte((0x80 | (code_point & 0x3F)).to_byte())
-            }
-          }
-          Some(_) => raise ParseError("Invalid escape sequence", self.pos)
-          None =>
-            raise ParseError("Unexpected end of string after escape", self.pos)
-        }
-      }
-      Some(c) => {
-        if c < 0x20 {
-          raise ParseError("Unescaped control character in string", self.pos)
-        }
-        buffer.write_byte(c)
-        self.pos = self.pos + 1
-      }
-      None => break
+  let final_view = loop self.view() {
+    // Handle closing quote
+    ['"', .. view] => break view
+    [
+      '\\',
+      // Handle escaped characters using array pattern matching
+      '"',
+      .. view,
+    ] => {
+      buffer.write_byte(b'"')
+      continue view
     }
+    ['\\', '\\', .. view] => {
+      buffer.write_byte(b'\\')
+      continue view
+    }
+    ['\\', '/', .. view] => {
+      buffer.write_byte(b'/')
+      continue view
+    }
+    ['\\', 'b', .. view] => {
+      buffer.write_byte(b'\b')
+      continue view
+    }
+    ['\\', 'f', .. view] => {
+      buffer.write_byte(b'\x0C') // Form feed
+      continue view
+    }
+    ['\\', 'n', .. view] => {
+      buffer.write_byte(b'\n')
+      continue view
+    }
+    ['\\', 'r', .. view] => {
+      buffer.write_byte(b'\r')
+      continue view
+    }
+    ['\\', 't', .. view] => {
+      buffer.write_byte(b'\t')
+      continue view
+    }
+    ['\\', 'u', h1, h2, h3, h4, .. view] => {
+      // Parse 4 hex digits for unicode escape
+      let mut code_point = 0
+      let hex_chars = [h1, h2, h3, h4]
+      for i = 0; i < 4; i = i + 1 {
+        let c = hex_chars[i]
+        let digit = match c {
+          '0'..='9' => (c - '0').to_int()
+          'a'..='f' => (c - 'a').to_int() + 10
+          'A'..='F' => (c - 'A').to_int() + 10
+          _ =>
+            raise ParseError(
+              "Invalid unicode escape sequence",
+              view.start_offset() - (4 - i),
+            )
+        }
+        code_point = code_point * 16 + digit
+      }
+
+      // Convert Unicode code point to UTF-8 bytes
+      if code_point <= 0x7F {
+        buffer.write_byte(code_point.to_byte())
+      } else if code_point <= 0x7FF {
+        buffer.write_byte((0xC0 | (code_point >> 6)).to_byte())
+        buffer.write_byte((0x80 | (code_point & 0x3F)).to_byte())
+      } else {
+        buffer.write_byte((0xE0 | (code_point >> 12)).to_byte())
+        buffer.write_byte((0x80 | ((code_point >> 6) & 0x3F)).to_byte())
+        buffer.write_byte((0x80 | (code_point & 0x3F)).to_byte())
+      }
+      continue view
+    }
+    ['\\', 'u', ..] =>
+      raise ParseError(
+        "Invalid unicode escape sequence",
+        self.view().start_offset(),
+      )
+    ['\\', _, .. view] =>
+      raise ParseError("Invalid escape sequence", view.start_offset() - 1)
+    ['\\'] =>
+      raise ParseError(
+        "Unexpected end of string after escape",
+        self.view().start_offset(),
+      )
+    [c, .. view] => {
+      // Regular character
+      if c < 0x20 {
+        raise ParseError(
+          "Unescaped control character in string",
+          view.start_offset() - 1,
+        )
+      }
+      buffer.write_byte(c)
+      continue view
+    }
+    [] => raise ParseError("Unterminated string", self.view().start_offset())
   }
-  raise ParseError("Unterminated string", self.pos - 1)
+  self.pos = final_view.start_offset()
+  String(buffer.contents())
 }
 
 ///|
