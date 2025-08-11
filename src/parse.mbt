@@ -18,7 +18,7 @@ fn Parser::new(input : @bytes.View) -> Parser {
 }
 
 ///|
-fn Parser::view(self : Parser) -> @bytes.View {
+fn Parser::get(self : Parser) -> @bytes.View {
   self.data[self.pos:]
 }
 
@@ -33,7 +33,7 @@ fn Parser::peek(self : Parser) -> Byte? {
 
 ///|
 fn Parser::skip_whitespace(self : Parser) -> Unit {
-  let view = loop self.view() {
+  let view = loop self.get() {
     [' ' | '\t' | '\n' | '\r', .. view] => continue view
     [.. view] => view
   }
@@ -41,7 +41,7 @@ fn Parser::skip_whitespace(self : Parser) -> Unit {
 }
 
 ///|
-fn Parser::update(self : Parser, view : @bytes.View) -> Unit {
+fn Parser::set(self : Parser, view : @bytes.View) -> Unit {
   self.pos = view.start_offset()
 }
 
@@ -53,33 +53,32 @@ fn[Number : Number] Parser::parse_value(
   if self.pos >= self.len {
     raise ParseError("Unexpected end of input", self.pos)
   }
-  match self.view() {
+  match self.get() {
     [.. "null", .. view] => {
-      self.update(view)
+      self.set(view)
       Null
     }
     [.. "true", .. view] => {
-      self.update(view)
+      self.set(view)
       Bool(true)
     }
     [.. "false", .. view] => {
-      self.update(view)
+      self.set(view)
       Bool(false)
     }
     ['"', .. view] => {
-      self.update(view)
       let buffer = @buffer.new()
-      self.parse_string(buffer)
+      self.set(Parser::parse_string(view, buffer))
       String(buffer.contents())
     }
     ['[', .. view] => {
-      self.update(view)
+      self.set(view)
       let elements = []
       self.parse_array(elements)
       Array(elements)
     }
     ['{', .. view] => {
-      self.update(view)
+      self.set(view)
       let obj = {}
       self.parse_object(obj)
       Object(obj)
@@ -166,10 +165,10 @@ fn[Number : Number] Parser::parse_number(
 
 ///|
 fn Parser::parse_string(
-  self : Parser,
+  view : @bytes.View,
   buffer : @buffer.T,
-) -> Unit raise ParseError {
-  let final_view = loop self.view() {
+) -> @bytes.View raise ParseError {
+  loop view {
     // Handle closing quote
     ['"', .. view] => break view
     [
@@ -241,17 +240,14 @@ fn Parser::parse_string(
       }
       continue view
     }
-    ['\\', 'u', ..] =>
-      raise ParseError(
-        "Invalid unicode escape sequence",
-        self.view().start_offset(),
-      )
+    ['\\', 'u', ..] as view =>
+      raise ParseError("Invalid unicode escape sequence", view.start_offset())
     ['\\', _, .. view] =>
       raise ParseError("Invalid escape sequence", view.start_offset() - 1)
-    ['\\'] =>
+    ['\\'] as view =>
       raise ParseError(
         "Unexpected end of string after escape",
-        self.view().start_offset(),
+        view.start_offset(),
       )
     [c, .. view] => {
       // Regular character
@@ -264,9 +260,8 @@ fn Parser::parse_string(
       buffer.write_byte(c)
       continue view
     }
-    [] => raise ParseError("Unterminated string", self.view().start_offset())
+    [] as view => raise ParseError("Unterminated string", view.start_offset())
   }
-  self.pos = final_view.start_offset()
 }
 
 ///|
@@ -310,15 +305,14 @@ fn[Number : Number] Parser::parse_object(
   obj : Map[Bytes, Json[Number]],
 ) -> Unit raise ParseError {
   self.skip_whitespace()
-  loop self.view() {
+  loop self.get() {
     ['}', .. view] => {
-      self.update(view)
+      self.set(view)
       return
     }
     ['"', .. view] => {
-      self.update(view)
       let buffer = @buffer.new()
-      self.parse_string(buffer)
+      self.set(Parser::parse_string(view, buffer))
       let key = buffer.contents()
       self.skip_whitespace()
 
@@ -337,7 +331,7 @@ fn[Number : Number] Parser::parse_object(
         Some(',') => {
           self.pos = self.pos + 1
           self.skip_whitespace()
-          continue self.view()
+          continue self.get()
         }
         Some('}') => {
           self.pos = self.pos + 1
