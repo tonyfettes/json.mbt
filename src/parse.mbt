@@ -1,5 +1,3 @@
-///| JSON Parser Implementation
-
 ///|
 pub suberror ParseError {
   ParseError(String, Int)
@@ -46,9 +44,7 @@ fn Parser::update(self : Parser, view : @bytes.View) -> Unit {
 }
 
 ///|
-fn[Number : Number] Parser::parse_value(
-  self : Parser,
-) -> Json[Number] raise ParseError {
+fn Parser::parse_value(self : Parser) -> Json raise ParseError {
   self.skip_whitespace()
   match self.view() {
     [.. "null", .. view] => {
@@ -87,9 +83,7 @@ fn[Number : Number] Parser::parse_value(
 }
 
 ///|
-fn[Number : Number] Parser::parse_number(
-  self : Parser,
-) -> Number raise ParseError {
+fn Parser::parse_number(self : Parser) -> @bytes.View raise ParseError {
   let start = self.pos
 
   // Optional minus sign
@@ -154,11 +148,7 @@ fn[Number : Number] Parser::parse_number(
     }
     _ => ()
   }
-  if Number::parse(self.data[start:self.pos]) is Some(number) {
-    return number
-  } else {
-    raise ParseError("Invalid number format", start)
-  }
+  self.data[start:self.pos]
 }
 
 ///|
@@ -264,9 +254,9 @@ fn Parser::parse_string(
 }
 
 ///|
-fn[Number : Number] Parser::parse_array(
+fn Parser::parse_array(
   self : Parser,
-  elements : Array[Json[Number]],
+  elements : Array[Json],
 ) -> Unit raise ParseError {
   self.skip_whitespace()
 
@@ -300,9 +290,9 @@ fn[Number : Number] Parser::parse_array(
 }
 
 ///|
-fn[Number : Number] Parser::parse_object(
+fn Parser::parse_object(
   self : Parser,
-  obj : Map[Bytes, Json[Number]],
+  obj : Map[Bytes, Json],
 ) -> Unit raise ParseError {
   self.skip_whitespace()
   loop self.view() {
@@ -348,10 +338,9 @@ fn[Number : Number] Parser::parse_object(
   }
 }
 
-///| Main parsing function that takes a @bytes.View and returns Json
-pub fn[Number : Number] parse(
-  input : @bytes.View,
-) -> Json[Number] raise ParseError {
+///|
+/// Main parsing function that takes a @bytes.View and returns Json
+pub fn parse(input : @bytes.View) -> Json raise ParseError {
   let parser = Parser::new(input)
   let value = parser.parse_value()
   parser.skip_whitespace()

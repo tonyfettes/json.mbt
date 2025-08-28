@@ -1,0 +1,31 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "tonyfettes/json"
+
+import(
+  "moonbitlang/core/bytes"
+)
+
+// Values
+fn parse(@bytes.View) -> Json raise ParseError
+
+// Errors
+pub suberror ParseError {
+  ParseError(String, Int)
+}
+
+// Types and methods
+pub enum Json {
+  Null
+  Bool(Bool)
+  Number(@bytes.View)
+  String(@bytes.View)
+  Array(Array[Json])
+  Object(Map[Bytes, Json])
+}
+impl Eq for Json
+impl Show for Json
+
+// Type aliases
+
+// Traits
+
