@@ -1,22 +1,22 @@
 ///|
 test "numbers_edge_cases" {
-  assert_true(@json.parse("-0") is @json.Json::Number(b"-0"))
-  assert_true(@json.parse("0.0") is @json.Json::Number(b"0.0"))
-  assert_true(@json.parse("-1.23") is @json.Json::Number(b"-1.23"))
-  assert_true(@json.parse("1E10") is @json.Json::Number(b"1E10"))
-  assert_true(@json.parse("1e-10") is @json.Json::Number(b"1e-10"))
+  assert_true(@json.parse("-0") is @json.Json::Number("-0"))
+  assert_true(@json.parse("0.0") is @json.Json::Number("0.0"))
+  assert_true(@json.parse("-1.23") is @json.Json::Number("-1.23"))
+  assert_true(@json.parse("1E10") is @json.Json::Number("1E10"))
+  assert_true(@json.parse("1e-10") is @json.Json::Number("1e-10"))
 }
 
 ///|
 test "array_with_all_types" {
   assert_true(
-    @json.parse(b"[null, true, false, 42, \"hello\", [], {}]")
+    @json.parse("[null, true, false, 42, \"hello\", [], {}]")
     is @json.Json::Array(
       [
         @json.Json::Null,
         @json.Json::Bool(true),
         @json.Json::Bool(false),
-        @json.Json::Number(b"42"),
+        @json.Json::Number("42"),
         @json.Json::String("hello"),
         @json.Json::Array([]),
         @json.Json::Object({ .. }),
@@ -28,11 +28,11 @@ test "array_with_all_types" {
 ///|
 test "array_with_nested_objects_and_arrays" {
   assert_true(
-    @json.parse(b"[{\"arr\": [1]}, [\"str\"], 123]")
+    @json.parse("[{\"arr\": [1]}, [\"str\"], 123]")
     is @json.Json::Array(
       [
         @json.Json::Object(
-          { "arr": @json.Json::Array([@json.Json::Number(b"1")]), .. }
+          { "arr": @json.Json::Array([@json.Json::Number("1")]), .. }
         ),
         @json.Json::Array([@json.Json::String("str")]),
         @json.Json::Number("123"),
@@ -45,7 +45,7 @@ test "array_with_nested_objects_and_arrays" {
 test "object_with_special_keys" {
   assert_true(
     @json.parse(
-      b"{\"key with spaces\": \"value1\", \"key_with_underscores\": \"value2\", \"key-with-dashes\": \"value3\"}",
+      "{\"key with spaces\": \"value1\", \"key_with_underscores\": \"value2\", \"key-with-dashes\": \"value3\"}",
     )
     is @json.Json::Object(
       {
@@ -77,7 +77,7 @@ test "complex_nested_structure" {
           [
             @json.Json::Object(
               {
-                "id": @json.Json::Number(b"1"),
+                "id": @json.Json::Number("1"),
                 "name": @json.Json::String("Alice"),
                 "active": @json.Json::Bool(true),
                 ..
@@ -133,7 +133,7 @@ test "mixed_array_object_nesting" {
         @json.Json::Object(
           {
             "items": @json.Json::Array(
-              [@json.Json::Number(b"1"), @json.Json::Number("2")]
+              [@json.Json::Number("1"), @json.Json::Number("2")]
             ),
             ..
           }
@@ -170,17 +170,17 @@ test "string_with_various_escapes" {
 
 ///|
 test "number_zero" {
-  assert_true(@json.parse("0") is @json.Json::Number(b"0"))
+  assert_true(@json.parse("0") is @json.Json::Number("0"))
 }
 
 ///|
 test "number_with_positive_exponent" {
-  assert_true(@json.parse("1.5e+10") is @json.Json::Number(b"1.5e+10"))
+  assert_true(@json.parse("1.5e+10") is @json.Json::Number("1.5e+10"))
 }
 
 ///|
 test "number_large_integer" {
-  assert_true(@json.parse("123456789") is @json.Json::Number(b"123456789"))
+  assert_true(@json.parse("123456789") is @json.Json::Number("123456789"))
 }
 
 ///|
@@ -238,7 +238,7 @@ test "large_nested_object" {
 ///|
 test "object" {
   assert_true(
-    @json.parse(b"{\"a\":\"b\"}")
+    @json.parse("{\"a\":\"b\"}")
     is @json.Json::Object({ "a": @json.Json::String("b"), .. }),
   )
 }
@@ -260,27 +260,27 @@ test "boolean_false" {
 
 ///|
 test "number_integer" {
-  assert_true(@json.parse("42") is @json.Json::Number(b"42"))
+  assert_true(@json.parse("42") is @json.Json::Number("42"))
 }
 
 ///|
 test "number_negative" {
-  assert_true(@json.parse("-123") is @json.Json::Number(b"-123"))
+  assert_true(@json.parse("-123") is @json.Json::Number("-123"))
 }
 
 ///|
 test "number_float" {
-  assert_true(@json.parse("3.14") is @json.Json::Number(b"3.14"))
+  assert_true(@json.parse("3.14") is @json.Json::Number("3.14"))
 }
 
 ///|
 test "number_exponential" {
-  assert_true(@json.parse("1.23e4") is @json.Json::Number(b"1.23e4"))
+  assert_true(@json.parse("1.23e4") is @json.Json::Number("1.23e4"))
 }
 
 ///|
 test "number_exponential_negative" {
-  assert_true(@json.parse("5e-3") is @json.Json::Number(b"5e-3"))
+  assert_true(@json.parse("5e-3") is @json.Json::Number("5e-3"))
 }
 
 ///|
@@ -317,13 +317,13 @@ test "string_with_unicode" {
 
 ///|
 test "object_empty" {
-  assert_true(@json.parse(b"{}") is @json.Json::Object({ .. }))
+  assert_true(@json.parse("{}") is @json.Json::Object({ .. }))
 }
 
 ///|
 test "object_single_property" {
   assert_true(
-    @json.parse(b"{\"name\": \"John\"}")
+    @json.parse("{\"name\": \"John\"}")
     is @json.Json::Object({ "name": @json.Json::String("John"), .. }),
   )
 }
@@ -331,10 +331,10 @@ test "object_single_property" {
 ///|
 test "object_multiple_properties" {
   assert_true(
-    @json.parse(b"{\"age\": 30, \"active\": true, \"name\": \"Alice\"}")
+    @json.parse("{\"age\": 30, \"active\": true, \"name\": \"Alice\"}")
     is @json.Json::Object(
       {
-        "age": @json.Json::Number(b"30"),
+        "age": @json.Json::Number("30"),
         "active": @json.Json::Bool(true),
         "name": @json.Json::String("Alice"),
         ..
@@ -352,7 +352,7 @@ test "object_nested" {
         "person": @json.Json::Object(
           {
             "name": @json.Json::String("Bob"),
-            "age": @json.Json::Number(b"25"),
+            "age": @json.Json::Number("25"),
             ..
           }
         ),
@@ -365,12 +365,12 @@ test "object_nested" {
 ///|
 test "object_with_array" {
   assert_true(
-    @json.parse(b"{\"numbers\": [1, 2, 3], \"name\": \"test\"}")
+    @json.parse("{\"numbers\": [1, 2, 3], \"name\": \"test\"}")
     is @json.Json::Object(
       {
         "numbers": @json.Json::Array(
           [
-            @json.Json::Number(b"1"),
+            @json.Json::Number("1"),
             @json.Json::Number("2"),
             @json.Json::Number("3"),
           ]
