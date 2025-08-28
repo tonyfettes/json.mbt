@@ -1,6 +1,18 @@
 ///|
 pub suberror ParseError {
-  ParseError(String, Int)
+  InvalidNumber(@bytes.View)
+  InvalidUnicodeEscapeSequence(@bytes.View)
+  InvalidEscapeSequence(@bytes.View)
+  UnescapedControlCharacter(@bytes.View)
+  UnterminatedString
+  UnexpectedCharacter(@bytes.View)
+  UnterminatedArray
+  ExpectCommaOrClosingBracket(@bytes.View)
+  ExpectColon(@bytes.View)
+  ExpectCommaOrClosingBrace(@bytes.View)
+  UnterminatedObject
+  InvalidObjectKey
+  ExtraContent
 }
 
 ///|
@@ -39,7 +51,7 @@ fn Parser::skip_whitespace(self : Parser) -> Unit {
 }
 
 ///|
-fn Parser::update(self : Parser, view : @bytes.View) -> Unit {
+fn Parser::advance(self : Parser, view : @bytes.View) -> Unit {
   self.pos = view.start_offset()
 }
 
@@ -48,37 +60,37 @@ fn Parser::parse_value(self : Parser) -> Json raise ParseError {
   self.skip_whitespace()
   match self.view() {
     [.. "null", .. view] => {
-      self.update(view)
+      self.advance(view)
       Null
     }
     [.. "true", .. view] => {
-      self.update(view)
+      self.advance(view)
       Bool(true)
     }
     [.. "false", .. view] => {
-      self.update(view)
+      self.advance(view)
       Bool(false)
     }
     ['"', .. view] => {
-      self.update(view)
+      self.advance(view)
       let buffer = @buffer.new()
       self.parse_string(buffer)
       String(buffer.contents())
     }
     ['[', .. view] => {
-      self.update(view)
+      self.advance(view)
       let array = []
       self.parse_array(array)
       Array(array)
     }
     ['{', .. view] => {
-      self.update(view)
+      self.advance(view)
       let object_ = {}
       self.parse_object(object_)
       Object(object_)
     }
     ['-' | '0'..='9', ..] => Number(self.parse_number())
-    [..] => raise ParseError("Unexpected character", self.pos)
+    [..] as view => raise UnexpectedCharacter(view)
   }
 }
 
@@ -91,7 +103,7 @@ fn Parser::parse_number(self : Parser) -> @bytes.View raise ParseError {
     self.pos = self.pos + 1
   }
   if self.pos >= self.len {
-    raise ParseError("Invalid number: missing digits", start)
+    raise InvalidNumber(self.data[start:])
   }
 
   // Integer part
@@ -106,7 +118,7 @@ fn Parser::parse_number(self : Parser) -> @bytes.View raise ParseError {
         }
       }
     }
-    _ => raise ParseError("Invalid number: invalid digit", start)
+    _ => raise InvalidNumber(self.data[start:])
   }
 
   // Optional fractional part
@@ -122,7 +134,7 @@ fn Parser::parse_number(self : Parser) -> @bytes.View raise ParseError {
           }
         }
       }
-      _ => raise ParseError("Invalid number: missing fractional digits", start)
+      _ => raise InvalidNumber(self.data[start:])
     }
   }
 
@@ -143,7 +155,7 @@ fn Parser::parse_number(self : Parser) -> @bytes.View raise ParseError {
             }
           }
         }
-        _ => raise ParseError("Invalid number: missing exponent digits", start)
+        _ => raise InvalidNumber(self.data[start:])
       }
     }
     _ => ()
@@ -157,65 +169,36 @@ fn Parser::parse_string(
   buffer : @buffer.T,
 ) -> Unit raise ParseError {
   let view = loop self.view() {
-    // Handle closing quote
     ['"', .. view] => break view
-    [
-      '\\',
-      // Handle escaped characters using array pattern matching
-      '"',
-      .. view,
-    ] => {
-      buffer.write_byte(b'"')
+    ['\\', '"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't' as b, .. view] => {
+      buffer.write_byte(b)
       continue view
     }
-    ['\\', '\\', .. view] => {
-      buffer.write_byte(b'\\')
-      continue view
-    }
-    ['\\', '/', .. view] => {
-      buffer.write_byte(b'/')
-      continue view
-    }
-    ['\\', 'b', .. view] => {
-      buffer.write_byte(b'\b')
-      continue view
-    }
-    ['\\', 'f', .. view] => {
-      buffer.write_byte(b'\x0C') // Form feed
-      continue view
-    }
-    ['\\', 'n', .. view] => {
-      buffer.write_byte(b'\n')
-      continue view
-    }
-    ['\\', 'r', .. view] => {
-      buffer.write_byte(b'\r')
-      continue view
-    }
-    ['\\', 't', .. view] => {
-      buffer.write_byte(b'\t')
-      continue view
-    }
-    ['\\', 'u', h1, h2, h3, h4, .. view] => {
-      // Parse 4 hex digits for unicode escape
+    ['\\', 'u', .. view] => {
       let mut code_point = 0
-      let hex_chars = [h1, h2, h3, h4]
-      for i = 0; i < 4; i = i + 1 {
-        let c = hex_chars[i]
-        let digit = match c {
-          '0'..='9' => (c - '0').to_int()
-          'a'..='f' => (c - 'a').to_int() + 10
-          'A'..='F' => (c - 'A').to_int() + 10
-          _ =>
-            raise ParseError(
-              "Invalid unicode escape sequence",
-              view.start_offset() - (4 - i),
-            )
+      fn parse_unicode_digit(b : @bytes.View) -> @bytes.View raise ParseError {
+        match b {
+          ['0'..='9' as b, .. rest] => {
+            code_point = code_point * 16 + (b - '0').to_int()
+            rest
+          }
+          ['a'..='f' as b, .. rest] => {
+            code_point = code_point * 16 + (b - 'a').to_int() + 10
+            rest
+          }
+          ['A'..='F' as b, .. rest] => {
+            code_point = code_point * 16 + (b - 'A').to_int() + 10
+            rest
+          }
+          _ => raise InvalidUnicodeEscapeSequence(b)
         }
-        code_point = code_point * 16 + digit
       }
 
-      // Convert Unicode code point to UTF-8 bytes
+      let view = view
+        |> parse_unicode_digit()
+        |> parse_unicode_digit()
+        |> parse_unicode_digit()
+        |> parse_unicode_digit()
       if code_point <= 0x7F {
         buffer.write_byte(code_point.to_byte())
       } else if code_point <= 0x7FF {
@@ -228,29 +211,15 @@ fn Parser::parse_string(
       }
       continue view
     }
-    ['\\', 'u', ..] as view =>
-      raise ParseError("Invalid unicode escape sequence", view.start_offset())
-    ['\\', _, .. view] =>
-      raise ParseError("Invalid escape sequence", view.start_offset() - 1)
-    ['\\'] as view =>
-      raise ParseError(
-        "Unexpected end of string after escape",
-        view.start_offset(),
-      )
-    [c, .. view] => {
-      // Regular character
-      if c < 0x20 {
-        raise ParseError(
-          "Unescaped control character in string",
-          view.start_offset() - 1,
-        )
-      }
-      buffer.write_byte(c)
+    ['\\', .. view] => raise InvalidEscapeSequence(view)
+    [0x00..<0x20, .. view] => raise UnescapedControlCharacter(view)
+    [b, .. view] => {
+      buffer.write_byte(b)
       continue view
     }
-    [] as view => raise ParseError("Unterminated string", view.start_offset())
+    [] => raise UnterminatedString
   }
-  self.update(view)
+  self.advance(view)
 }
 
 ///|
@@ -259,32 +228,28 @@ fn Parser::parse_array(
   elements : Array[Json],
 ) -> Unit raise ParseError {
   self.skip_whitespace()
-
-  // Check for empty array
   match self.view() {
     [']', .. view] => {
-      self.update(view)
+      self.advance(view)
       return
     }
     [..] => ()
   }
-
-  // Parse elements
   while true {
     let value = self.parse_value()
     elements.push(value)
     self.skip_whitespace()
     match self.view() {
       [',', .. view] => {
-        self.update(view)
+        self.advance(view)
         self.skip_whitespace()
       }
       [']', .. view] => {
-        self.update(view)
+        self.advance(view)
         return
       }
-      [_, ..] => raise ParseError("Expected comma or closing bracket", self.pos)
-      [] => raise ParseError("Unterminated array", self.pos)
+      [_, ..] as view => raise ExpectCommaOrClosingBracket(view)
+      [] => raise UnterminatedArray
     }
   }
 }
@@ -297,11 +262,11 @@ fn Parser::parse_object(
   self.skip_whitespace()
   loop self.view() {
     ['}', .. view] => {
-      self.update(view)
+      self.advance(view)
       return
     }
     ['"', .. view] => {
-      self.update(view)
+      self.advance(view)
       let buffer = @buffer.new()
       self.parse_string(buffer)
       let key = buffer.contents()
@@ -310,10 +275,10 @@ fn Parser::parse_object(
       // Expect colon
       match self.view() {
         [':', .. view] => {
-          self.update(view)
+          self.advance(view)
           self.skip_whitespace()
         }
-        [..] => raise ParseError("Expected colon after object key", self.pos)
+        [..] as view => raise ExpectColon(view)
       }
 
       // Parse value
@@ -322,19 +287,19 @@ fn Parser::parse_object(
       self.skip_whitespace()
       match self.view() {
         [',', .. view] => {
-          self.update(view)
+          self.advance(view)
           self.skip_whitespace()
           continue self.view()
         }
         ['}', .. view] => {
-          self.update(view)
+          self.advance(view)
           return
         }
-        [_, ..] => raise ParseError("Expected comma or closing brace", self.pos)
-        [] => raise ParseError("Unterminated object", self.pos)
+        [_, ..] as view => raise ExpectCommaOrClosingBrace(view)
+        [] => raise UnterminatedObject
       }
     }
-    [..] => raise ParseError("Invalid object key", self.pos)
+    [..] => raise InvalidObjectKey
   }
 }
 
@@ -344,9 +309,10 @@ pub fn parse(input : @bytes.View) -> Json raise ParseError {
   let parser = Parser::new(input)
   let value = parser.parse_value()
   parser.skip_whitespace()
-  if parser.pos < parser.len {
-    raise ParseError("Unexpected content after JSON value", parser.pos)
-  } else {
+  let view = parser.view()
+  if view is [] {
     value
+  } else {
+    raise ExtraContent
   }
 }
