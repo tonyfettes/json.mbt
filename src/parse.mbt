@@ -97,16 +97,12 @@ fn Parser::parse_value(self : Parser) -> Json raise ParseError {
 ///|
 fn Parser::parse_number(self : Parser) -> @bytes.View raise ParseError {
   let start = self.pos
-
-  // Optional minus sign
   if self.peek() == Some('-') {
     self.pos = self.pos + 1
   }
   if self.pos >= self.len {
     raise InvalidNumber(self.data[start:])
   }
-
-  // Integer part
   match self.peek() {
     Some('0') => self.pos = self.pos + 1
     Some('1'..='9') => {
@@ -120,8 +116,6 @@ fn Parser::parse_number(self : Parser) -> @bytes.View raise ParseError {
     }
     _ => raise InvalidNumber(self.data[start:])
   }
-
-  // Optional fractional part
   if self.peek() == Some('.') {
     self.pos = self.pos + 1
     match self.peek() {
@@ -137,8 +131,6 @@ fn Parser::parse_number(self : Parser) -> @bytes.View raise ParseError {
       _ => raise InvalidNumber(self.data[start:])
     }
   }
-
-  // Optional exponent part
   match self.peek() {
     Some('e' | 'E') => {
       self.pos = self.pos + 1
@@ -304,7 +296,6 @@ fn Parser::parse_object(
 }
 
 ///|
-/// Main parsing function that takes a @bytes.View and returns Json
 pub fn parse(input : @bytes.View) -> Json raise ParseError {
   let parser = Parser::new(input)
   let value = parser.parse_value()
